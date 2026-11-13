@@ -1,150 +1,79 @@
-# 🚀 IoT-Based Boiler Monitoring System
+# IoT-Based Monitoring of Horizontal Pressure Vessels
 
-## 📌 Overview
-This project monitors temperature and pressure of **three horizontal pressure vessels** using ESP32 and sends data to the cloud (ThingSpeak).
+Final-year major project (NMIT, Department of Mechanical Engineering): an IoT rig that logs water temperature and pressure in **three sealed horizontal pressure vessels**, raises local alarms, and sends the data to ThingSpeak for live charts and CSV export.
 
----
+This repository holds the ESP32 firmware and a browser-based dashboard simulator.
 
-## 🔧 Features
-- 🌡️ Temperature monitoring (DS18B20)
-- ⚙️ Pressure monitoring (4–20mA sensors)
-- 📡 IoT cloud integration (ThingSpeak)
-- 🚨 Alert system (Buzzer + LED)
-- 🔁 Real-time data updates
-
----
-
-## ⚙️ Tech Stack
-- ESP32
-- Arduino IDE
-- ThingSpeak
-- Embedded C++
+```
+firmware/vessel_node/
+  vessel_node.ino      # one sketch, flashed to each of the three ESP32 boards
+  secrets.example.h    # copy to secrets.h and fill in Wi-Fi + ThingSpeak keys
+index.html             # dashboard simulator (no hardware needed)
+```
 
 ---
 
-## 🔌 Hardware Setup
-- DS18B20 → GPIO 4
-- Pressure Sensors → ADC Pins (GPIO 34, 35, 32)
-- Buzzer → GPIO 26
-- LED → GPIO 25
+## System design
+
+- **One ESP32 per vessel**: each board reads its own sensors, drives its own alarm and writes to its own ThingSpeak channel.
+- **Temperature:** DS18B20 in a thermowell, read every 5 s (12-bit, non-blocking).
+- **Pressure:** 0-10 bar gauge, 4-20 mA two-wire transducer on a 24 V DC loop, read every 1 s.
+- **Upload:** 15 s averages to ThingSpeak (field 1 = temperature in °C, field 2 = pressure in bar g). 15 s is the free-channel update limit.
+- **Alarm:** buzzer + LED within about 1 s if pressure > 3.5 bar g, temperature > 120 °C, or a sensor fault (broken 4-20 mA loop, missing probe). Works without Wi-Fi. Clears below 3.3 bar and 118 °C.
+- **Mechanical safety (independent of firmware):** 5 bar g relief valve and a Bourdon gauge on every vessel.
+
+## Wiring (each vessel)
+
+| Signal | Connection |
+|---|---|
+| DS18B20 VDD / DQ / GND | 3V3 / GPIO 4 (4.7 kΩ pull-up to 3V3) / GND |
+| Pressure transducer | +24 V → transducer (+); transducer (−) → 150 Ω 0.1 % → GND |
+| ADC input | 150 Ω sense node → 1 kΩ → GPIO 34, 100 nF from GPIO 34 to GND |
+| Buzzer | GPIO 26 → 1 kΩ → BC547 base; 5 V active buzzer from +5 V to collector; emitter to GND |
+| Alarm LED | GPIO 25 → 220 Ω → red LED → GND |
+| Power | ESP32 from 5 V USB; 24 V supply GND joined to ESP32 GND |
+
+The 150 Ω resistor turns 4-20 mA into 0.6-3.0 V, inside the ESP32 ADC's linear range, so no voltage divider is needed. Power the DS18B20 from **3.3 V, not 5 V**, so its data line stays within the ESP32 pin limit. GPIO 34 is on ADC1, which keeps working while Wi-Fi is on (ADC2 does not).
+
+## Pressure calibration
+
+```
+P (bar) = (V_mV − CAL_ZERO_MV) × CAL_SPAN_BAR / (CAL_SPAN_MV − CAL_ZERO_MV)
+defaults: 600 mV → 0 bar, 3000 mV → 10 bar
+```
+
+Before the first run, note the millivolt reading with the vessel open (0 bar) and at a known pressure on the Bourdon gauge (for example 2 bar during the hydrostatic test), then put those values in the constants at the top of `vessel_node.ino`.
+
+## Setup
+
+1. Arduino IDE 2.x with the **esp32 by Espressif** board package; board: *ESP32 Dev Module*.
+2. Library Manager: install **OneWire**, **DallasTemperature** and **ThingSpeak**.
+3. Create three ThingSpeak channels, one per vessel, each with field 1 = Temperature and field 2 = Pressure.
+4. In `firmware/vessel_node/`, copy `secrets.example.h` to `secrets.h`, set `VESSEL_ID`, Wi-Fi details, channel ID and write key.
+5. Flash the board, open the serial monitor at 115200 baud and check the readings against the Bourdon gauge.
+6. Repeat steps 4 and 5 for vessels 2 and 3.
+
+`secrets.h` is listed in `.gitignore`, so your keys are never committed.
 
 ---
 
-## 🚀 How to Run
-1. Install required libraries
-2. Upload code to ESP32
-3. Connect WiFi
-4. Monitor data on ThingSpeak
+## Dashboard simulator
 
----
+`index.html` is a browser-based simulation of the monitoring dashboard for three vessels, built before the hardware existed. Live demo: [iot-pressure-vessel-project.netlify.app](https://iot-pressure-vessel-project.netlify.app)
 
-## 📊 Output
-- Real-time sensor readings
-- Cloud dashboard
-- Alert system for high pressure
-
----
-
-## 📌 Future Improvements
-- Mobile app alerts
-- AI-based prediction
-- Advanced dashboard
-
----
-
-## 👨‍💻 Author
-**Dushyant Baroliya**
-A real-time web dashboard simulating an IoT-based pressure vessel monitoring system using ESP32 microcontrollers, ThingSpeak, and Blynk.
-
-Live demo → [iot-pressure-vessel-project.netlify.app](https://iot-pressure-vessel-project.netlify.app)
-
----
-
-## Features
-
-- Live simulation of temperature & pressure across 3 vessels
+- Live temperature and pressure cards for three vessels
 - Real-time line charts (Chart.js)
-- Pressure threshold alerting with blinking indicators
-- Adjustable heating speed (Slow / Fast)
-- Configurable pressure threshold via slider
-- Event log with timestamped alerts and sync messages
-- Reset functionality
+- Pressure threshold alert with blinking indicators and an event log
+- Heating-speed toggle, threshold slider (1.5 to 4.5 bar) and reset
+
+Open `index.html` in any browser; there is no build step. All values in the simulator are generated by a simple model, not real sensor data.
 
 ---
 
-## Tech Stack
+## Author
 
-| Layer | Technology |
-|---|---|
-| Markup | HTML5 |
-| Styling | CSS3 (CSS Variables, Grid, Flexbox) |
-| Logic | Vanilla JavaScript (ES6+) |
-| Charts | Chart.js v4.4.1 (CDN) |
-| Hosting | Netlify (static) |
-| IoT Platform (simulated) | ESP32 · ThingSpeak · Blynk |
-
-> **Note:** The IoT hardware integration (ESP32, ThingSpeak, Blynk) is simulated in the frontend using exponential growth physics models. No real sensor data is used.
-
----
-
-## Project Structure
-
-```
-iot-pressure-vessel/
-├── index.html      # Complete single-file app (HTML + CSS + JS)
-└── README.md
-```
-
----
-
-## Getting Started
-
-### Run locally
-
-Just open `index.html` in any browser — no build step, no dependencies, no server needed.
-
-```bash
-git clone https://github.com/YOUR_USERNAME/iot-pressure-vessel.git
-cd iot-pressure-vessel
-open index.html   # or double-click the file
-```
-
-### Deploy to Netlify
-
-1. Push this repo to GitHub
-2. Go to [netlify.com](https://netlify.com) → **Add new site** → **Import from Git**
-3. Select your repo, leave build settings blank
-4. Click **Deploy** — done
-
----
-
-## How the Simulation Works
-
-Temperature and pressure values are generated using exponential saturation models:
-
-```js
-// Temperature rises toward a max, offset per vessel
-tempModel(t, v) = 25 + (t * 2.7 + offset[v]) * (1 - e^(-t/18))
-
-// Pressure is derived from temperature
-pressModel(t, v) = ((temp - 60) / 40) * 2.5 + offset[v]
-```
-
-Alerts fire when `pressure >= threshold` (default: 3.5 bar).
-
----
-
-## Controls
-
-| Control | Description |
-|---|---|
-| Slow / Fast | Sets tick interval (2000ms / 800ms) |
-| Threshold slider | Adjusts alert trigger pressure (1.5–4.5 bar) |
-| Reset | Clears all data and restarts simulation |
-
----
+**Dushyant Baroliya**, with Arpit Mishra and Varun Lath. Guide: Dr. P. B. Shetty.
 
 ## License
 
-MIT — free to use, modify, and distribute.
-
+MIT
